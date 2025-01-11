@@ -28,7 +28,14 @@ namespace SimpleMACross
 
         public void InitializeIndicators(Symbol symbol)
         {
-            this.rsi = Core.Instance.Indicators.BuiltIn.RSI(this.period, PriceType.Close, RSIMode.Simple, MaMode.SMA, 1, IndicatorCalculationType.AllAvailableData);
+            this.rsi = Core.Instance.Indicators.BuiltIn.RSI(
+                period: this.period,                                   // RSI週期
+                priceType: PriceType.Close,                           // 使用收盤價
+                rsiMode: RSIMode.Simple,                              // 簡單RSI模式
+                maMode: MaMode.SMA,                                   // 使用簡單移動平均
+                maperiod: 1,                                          // MA週期設為1（標準RSI）
+                calculationType: IndicatorCalculationType.AllAvailableData
+            );
         }
 
         public void AddIndicatorsToHistory(HistoricalData hdm)

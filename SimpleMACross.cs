@@ -122,8 +122,11 @@ namespace SimpleMACross
             this.eventManager = new EventManager(this);
             this.tradingStateManager = new TradingStateManager(this);
             this.tradeResultManager = new TradeResultManager(this);
+            // 使用MACD策略（參數分別是：快線週期, 慢線週期, 信號線週期）
+            //this.indicatorStrategy = new MACDStrategy(12, 26, 9);
+            //this.indicatorStrategy = new RSIStrategy(14, 90, 10);  // 週期, 超買水平, 超賣水平
             this.indicatorStrategy = new MAStrategy(this.FastMA, this.SlowMA);  // 新增：初始化指標策略
-
+            
             this.StrategyId = 1;
         }
         #endregion
