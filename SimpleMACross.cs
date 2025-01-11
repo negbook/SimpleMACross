@@ -82,6 +82,8 @@ namespace SimpleMACross
         private int longPositionsCount;
         private int shortPositionsCount;
         private string orderTypeId;
+        private string orderTypeIdLimit;
+        private string orderTypeIdStop;
         private bool waitOpenPosition;
         private bool waitClosePositions;
         private double totalNetPl;
@@ -221,6 +223,26 @@ namespace SimpleMACross
             if (string.IsNullOrEmpty(this.orderTypeId))
             {
                 this.Log("所選交易品種不支持市價單", StrategyLoggingLevel.Error);
+                return false;
+            }
+
+            this.orderTypeIdLimit = Core.OrderTypes.FirstOrDefault(x => 
+                x.ConnectionId == this.CurrentSymbol.ConnectionId && 
+                x.Behavior == OrderTypeBehavior.Limit)?.Id;
+
+            if (string.IsNullOrEmpty(this.orderTypeId))
+            {
+                this.Log("所選交易品種不支持限價單", StrategyLoggingLevel.Error);
+                return false;
+            }
+
+            this.orderTypeIdStop = Core.OrderTypes.FirstOrDefault(x => 
+                x.ConnectionId == this.CurrentSymbol.ConnectionId && 
+                x.Behavior == OrderTypeBehavior.Stop)?.Id;
+
+            if (string.IsNullOrEmpty(this.orderTypeId))
+            {
+                this.Log("所選交易品種不支持停損單", StrategyLoggingLevel.Error);
                 return false;
             }
 
