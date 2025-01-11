@@ -407,10 +407,14 @@ namespace SimpleMACross
         private class PositionManager
         {
             private readonly SimpleMACross strategy;
+            private readonly string sendingSource;
 
             public PositionManager(SimpleMACross strategy)
             {
                 this.strategy = strategy;
+                this.sendingSource = OrderHelper.GenerateSendingSource(
+                    strategy.StrategyId,
+                    strategy.CurrentSymbol?.Name);
             }
 
             /// <summary>
@@ -424,6 +428,66 @@ namespace SimpleMACross
                     .ToArray();
             }
 
+            public Order[] GetCurrentOrders()
+            {
+                return Core.Instance.Orders.Where(x => x.Symbol == strategy.CurrentSymbol && 
+                               x.Account == strategy.CurrentAccount)
+                    .ToArray();
+            }
+
+            public Order[] GetCurrentPendingOrders()
+            {
+                
+                //OrderStatus.Cancelled表示訂單已取消
+                //OrderStatus.Filled表示訂單已成交
+                //OrderStatus.Inactive表示訂單已失效
+                //OrderStatus.Opened表示訂單已開立但尚未成交
+                //OrderStatus.PartiallyFilled表示訂單部分成交
+                //OrderStatus.Refused表示訂單被拒絕
+                //OrderStatus.Unspecified表示訂單狀態未指定
+                return Core.Instance.Orders.Where(x => x.Symbol == strategy.CurrentSymbol && 
+                               x.Account == strategy.CurrentAccount && x.Status == OrderStatus.Opened)
+                    .ToArray();
+            }
+
+            // CancelPendingOrders
+            public void CancelPendingOrders()
+            {
+                var pendingOrders = GetCurrentPendingOrders();
+                foreach (var order in pendingOrders)
+                {
+                    Core.Instance.CancelOrder(order);
+
+                }
+                return ;
+            }
+
+            /// <summary>
+            /// 平倉操作
+            /// </summary>
+            public AdvancedTradingOperationResult ClosePositions()
+            {
+                return Core.Instance.AdvancedTradingOperations.ClosePositions(strategy.CurrentSymbol, 
+                    strategy.CurrentAccount, 
+                    sendingSource);
+            }
+
+            public AdvancedTradingOperationResult CancelOrders()
+            {
+                return Core.Instance.AdvancedTradingOperations.CancelOrders(strategy.CurrentSymbol, 
+                    strategy.CurrentAccount, 
+                    sendingSource);
+            }
+
+            public AdvancedTradingOperationResult Flatten()
+            {
+                return Core.Instance.AdvancedTradingOperations.Flatten(
+                    strategy.CurrentSymbol, 
+                    strategy.CurrentAccount, 
+                    sendingSource);
+            }
+
+           
             /// <summary>
             /// 更新倉位計數
             /// </summary>
@@ -486,10 +550,7 @@ namespace SimpleMACross
                 strategy.tradingStateManager.SetClosingState(true);
                 strategy.Log($"[{sendingSource}] 開始平倉 (倉位數量: {positions.Length})");
                 
-                Core.Instance.AdvancedTradingOperations.Flatten(
-                    strategy.CurrentSymbol, 
-                    strategy.CurrentAccount, 
-                    sendingSource);
+                strategy.positionManager.ClosePositions();
             }
 
             private void HandleOrderResult(TradingOperationResult result, Side side)

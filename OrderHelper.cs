@@ -18,7 +18,9 @@ namespace SimpleMACross
             string orderTypeId,
             double quantity,
             Side side,
-            string sendingSource)
+            string sendingSource,
+            SlTpHolder stopLoss = null,
+            SlTpHolder takeProfit = null)
         {
             return new PlaceOrderRequestParameters
             {
@@ -27,7 +29,9 @@ namespace SimpleMACross
                 OrderTypeId = orderTypeId,
                 Quantity = quantity,
                 Side = side,
-                SendingSource = sendingSource
+                SendingSource = sendingSource,
+                StopLoss = stopLoss,
+                TakeProfit = takeProfit
             };
         }
 
@@ -41,9 +45,11 @@ namespace SimpleMACross
             double quantity,
             Side side,
             double limitPrice,
-            string sendingSource)
+            string sendingSource,
+            SlTpHolder stopLoss = null,
+            SlTpHolder takeProfit = null)
         {
-            var request = CreateMarketOrderRequest(account, symbol, orderTypeId, quantity, side, sendingSource);
+            var request = CreateMarketOrderRequest(account, symbol, orderTypeId, quantity, side, sendingSource, stopLoss, takeProfit);
             request.Price = limitPrice;
             return request;
         }
@@ -57,12 +63,34 @@ namespace SimpleMACross
             string orderTypeId,
             double quantity,
             Side side,
-            double stopPrice,
-            string sendingSource)
+            double triggerPrice,
+            string sendingSource,
+            SlTpHolder stopLoss = null,
+            SlTpHolder takeProfit = null)
         {
-            var request = CreateMarketOrderRequest(account, symbol, orderTypeId, quantity, side, sendingSource);
-            request.TriggerPrice = stopPrice;
+            var request = CreateMarketOrderRequest(account, symbol, orderTypeId, quantity, side, sendingSource, stopLoss, takeProfit);
+            request.TriggerPrice = triggerPrice;
             return request;
+        }
+
+        /// <summary>
+        /// 創建止損設置
+        /// </summary>
+        public static SlTpHolder CreateStopLoss(Symbol symbol, double entryPrice, double stopPrice)
+        {
+            return SlTpHolder.CreateSL(
+                Math.Abs(symbol.CalculateTicks(entryPrice, stopPrice)), 
+                PriceMeasurement.Offset);
+        }
+
+        /// <summary>
+        /// 創建止盈設置
+        /// </summary>
+        public static SlTpHolder CreateTakeProfit(Symbol symbol, double entryPrice, double takeProfitPrice)
+        {
+            return SlTpHolder.CreateTP(
+                Math.Abs(symbol.CalculateTicks(entryPrice, takeProfitPrice)), 
+                PriceMeasurement.Offset);
         }
 
         /// <summary>
@@ -71,6 +99,20 @@ namespace SimpleMACross
         public static string GenerateSendingSource(int strategyId, string symbolName)
         {
             return $"MA_Cross_{strategyId}_{symbolName ?? "Unknown"}";
+        }
+
+        /// <summary>
+        /// 格式化價格到正確的 Tick Size
+        /// </summary>
+        public static double FormatPrice(Symbol symbol, double price)
+        {
+            if (symbol == null)
+                throw new ArgumentNullException(nameof(symbol));
+
+            double roundedPrice = symbol.RoundPriceToTickSize(price, symbol.TickSize);
+            return double.TryParse(symbol.FormatPrice(roundedPrice), out double p) ? 
+                   symbol.RoundPriceToTickSize(price, symbol.TickSize) : 
+                   roundedPrice;
         }
     }
 } 
