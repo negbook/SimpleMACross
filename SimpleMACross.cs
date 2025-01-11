@@ -448,67 +448,60 @@ namespace SimpleMACross
         private class OrderExecutor
         {
             private readonly SimpleMACross strategy;
+            private readonly string sendingSource;
 
             public OrderExecutor(SimpleMACross strategy)
             {
                 this.strategy = strategy;
-            }
-
-            /// <summary>
-            /// 生成發送源標識
-            /// </summary>
-            private string GenerateSource(string caller)
-            {
-                return $"MA_Cross_{strategy.StrategyId}_{strategy.CurrentSymbol?.Name ?? "Unknown"}_{caller ?? "Unknown"}";
+                this.sendingSource = OrderHelper.GenerateSendingSource(
+                    strategy.StrategyId,
+                    strategy.CurrentSymbol?.Name);
             }
 
             /// <summary>
             /// 執行開倉
             /// </summary>
-            public void ExecuteOpen(Side side, [CallerMemberName] string caller = null)
+            public void ExecuteOpen(Side side)
             {
-                string source = GenerateSource(caller);
                 strategy.tradingStateManager.SetOpeningState(true);
-                strategy.Log($"[{source}] 開始開立{(side == Side.Buy ? "多" : "空")}頭倉位");
+                strategy.Log($"[{sendingSource}] 開始開立{(side == Side.Buy ? "多" : "空")}頭倉位");
 
-                var result = Core.Instance.PlaceOrder(new PlaceOrderRequestParameters
-                {
-                    Account = strategy.CurrentAccount,
-                    Symbol = strategy.CurrentSymbol,
-                    OrderTypeId = strategy.orderTypeId,
-                    Quantity = strategy.Quantity,
-                    Side = side,
-                    SendingSource = source
-                });
+                var request = OrderHelper.CreateMarketOrderRequest(
+                    strategy.CurrentAccount,
+                    strategy.CurrentSymbol,
+                    strategy.orderTypeId,
+                    strategy.Quantity,
+                    side,
+                    sendingSource);
 
-                HandleOrderResult(result, side, source);
+                var result = Core.Instance.PlaceOrder(request);
+                HandleOrderResult(result, side);
             }
 
             /// <summary>
             /// 執行平倉
             /// </summary>
-            public void ExecuteClose(Position[] positions, [CallerMemberName] string caller = null)
+            public void ExecuteClose(Position[] positions)
             {
-                string source = GenerateSource(caller);
                 strategy.tradingStateManager.SetClosingState(true);
-                strategy.Log($"[{source}] 開始平倉 (倉位數量: {positions.Length})");
+                strategy.Log($"[{sendingSource}] 開始平倉 (倉位數量: {positions.Length})");
                 
                 Core.Instance.AdvancedTradingOperations.Flatten(
                     strategy.CurrentSymbol, 
                     strategy.CurrentAccount, 
-                    source);
+                    sendingSource);
             }
 
-            private void HandleOrderResult(TradingOperationResult result, Side side, string source)
+            private void HandleOrderResult(TradingOperationResult result, Side side)
             {
                 if (result.Status == TradingOperationResultStatus.Failure)
                 {
-                    strategy.Log($"[{source}] 開立{(side == Side.Buy ? "多" : "空")}頭倉位被拒絕: {(string.IsNullOrEmpty(result.Message) ? result.Status : result.Message)}", 
+                    strategy.Log($"[{sendingSource}] 開立{(side == Side.Buy ? "多" : "空")}頭倉位被拒絕: {(string.IsNullOrEmpty(result.Message) ? result.Status : result.Message)}", 
                         StrategyLoggingLevel.Trading);
                     strategy.ProcessTradingRefuse();
                 }
                 else
-                    strategy.Log($"[{source}] 倉位已開立: {result.Status}", StrategyLoggingLevel.Trading);
+                    strategy.Log($"[{sendingSource}] 倉位已開立: {result.Status}", StrategyLoggingLevel.Trading);
             }
         }
 
