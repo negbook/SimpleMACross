@@ -1,0 +1,11 @@
+# Visual Studio files
+.vs/
+bin/
+obj/
+*.user
+*.suo
+*.csproj
+*.sln
+
+# 只保留策略代碼
+!SimpleMACross.cs 
