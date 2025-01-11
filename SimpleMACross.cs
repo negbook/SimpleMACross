@@ -1,5 +1,22 @@
 ﻿// Copyright QUANTOWER LLC. © 2017-2022. All rights reserved.
 // https://github.com/Quantower/Examples/blob/master/Strategies/SimpleMACross.cs
+
+/*
+指標切換指南：
+1. 在構造函數中替換指標策略：
+   - MA策略：this.indicatorStrategy = new MAStrategy(this.FastMA, this.SlowMA);
+   - RSI策略：this.indicatorStrategy = new RSIStrategy(14, 70, 30);
+   
+2. 可用的指標策略：
+   - MAStrategy: 移動平均線交叉策略
+   - RSIStrategy: RSI超買超賣策略
+   
+3. 添加新策略：
+   - 創建新的策略類
+   - 實現 IIndicatorStrategy 接口
+   - 在構造函數中使用新策略
+*/
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,100 +27,77 @@ using System.Runtime.CompilerServices;
 namespace SimpleMACross
 {
     /// <summary>
-    /// 簡單移動平均線交叉策略
-    /// 當快速MA穿越慢速MA時產生交易信號
+    /// 通用指標交易策略框架
+    /// 支持多種指標策略的切換和組合
     /// </summary>
     public sealed class SimpleMACross : Strategy, ICurrentAccount, ICurrentSymbol
     {
-        #region Properties and Fields
+        #region Input Parameters
         /// <summary>
-        /// 策略所需的屬性和字段定義區域
+        /// 策略輸入參數定義區域
         /// </summary>
-
         [InputParameter("Symbol", 0)]
         public Symbol CurrentSymbol { get; set; }
 
-        /// <summary>
-        /// Account to place orders
-        /// </summary>
         [InputParameter("Account", 1)]
         public Account CurrentAccount { get; set; }
 
-        /// <summary>
-        /// Period for Fast MA indicator
-        /// </summary>
         [InputParameter("Fast MA", 2, minimum: 1, maximum: 100, increment: 1, decimalPlaces: 0)]
         public int FastMA { get; set; }
 
-        /// <summary>
-        /// Period for Slow MA indicator
-        /// </summary>
         [InputParameter("Slow MA", 3, minimum: 1, maximum: 100, increment: 1, decimalPlaces: 0)]
         public int SlowMA { get; set; }
 
-        /// <summary>
-        /// Quantity to open order
-        /// </summary>
         [InputParameter("Quantity", 4, 0.1, 99999, 0.1, 2)]
         public double Quantity { get; set; }
 
-        /// <summary>
-        /// Period to load history
-        /// </summary>
         [InputParameter("Period", 5)]
         public Period Period { get; set; }
 
-        /// <summary>
-        /// Start point to load history
-        /// </summary>
         [InputParameter("Start point", 6)]
         public DateTime StartPoint { get; set; }
 
-        /// <summary>
-        /// 策略實例標識
-        /// 用於區分同一策略的不同實例
-        /// </summary>
         [InputParameter("Strategy ID", 7, minimum: 1, maximum: 99999, increment: 1, decimalPlaces: 0)]
         public int StrategyId { get; set; }
+        #endregion
 
-        public override string[] MonitoringConnectionsIds => new string[] { this.CurrentSymbol?.ConnectionId, this.CurrentAccount?.ConnectionId };
-
+        #region Core Components
         /// <summary>
-        /// 策略內部使用的私有字段
+        /// 核心組件定義區域
         /// </summary>
-        private Indicator indicatorFastMA;        // 快速移動平均線指標
-        private Indicator indicatorSlowMA;        // 慢速移動平均線指標
-        private HistoricalData hdm;               // 歷史數據管理器
-        private int longPositionsCount;           // 多頭倉位計數
-        private int shortPositionsCount;          // 空頭倉位計數
-        private string orderTypeId;               // 訂單類型ID
-        /// <summary>
-        /// 開倉等待標記
-        /// 重要：防止在未收到開倉確認前重複發送開倉指令
-        /// 1. 發送開倉請求時設為 true
-        /// 2. 收到倉位確認時設為 false
-        /// 3. 避免因行情快速波動導致重複開倉
-        /// </summary>
-        private bool waitOpenPosition;            // 等待開倉標記
-        /// <summary>
-        /// 平倉等待標記
-        /// 重要：防止在平倉過程中重複發送平倉指令
-        /// 1. 發送平倉請求時設為 true
-        /// 2. 所有倉位完全平倉後設為 false
-        /// 3. 確保所有倉位有序平倉，避免混亂
-        /// </summary>
-        private bool waitClosePositions;          // 等待平倉標記
-        private double totalNetPl;                // 總淨利潤
-        private double totalGrossPl;              // 總毛利潤
-        private double totalFee;                  // 總手續費
-
         private readonly PositionManager positionManager;
         private readonly OrderExecutor orderExecutor;
         private readonly MetricsManager metricsManager;
         private readonly EventManager eventManager;
         private readonly TradingStateManager tradingStateManager;
         private readonly TradeResultManager tradeResultManager;
+        private readonly IIndicatorStrategy indicatorStrategy;
+        #endregion
 
+        #region State Variables
+        /// <summary>
+        /// 狀態變量定義區域
+        /// </summary>
+        private HistoricalData hdm;
+        private int longPositionsCount;
+        private int shortPositionsCount;
+        private string orderTypeId;
+        private bool waitOpenPosition;
+        private bool waitClosePositions;
+        private double totalNetPl;
+        private double totalGrossPl;
+        private double totalFee;
+        #endregion
+
+        #region Monitoring and Connection
+        /// <summary>
+        /// 監控和連接相關定義
+        /// </summary>
+        public override string[] MonitoringConnectionsIds => new string[] 
+        { 
+            this.CurrentSymbol?.ConnectionId, 
+            this.CurrentAccount?.ConnectionId 
+        };
         #endregion
 
         #region Constructor
@@ -128,6 +122,7 @@ namespace SimpleMACross
             this.eventManager = new EventManager(this);
             this.tradingStateManager = new TradingStateManager(this);
             this.tradeResultManager = new TradeResultManager(this);
+            this.indicatorStrategy = new MAStrategy(this.FastMA, this.SlowMA);  // 新增：初始化指標策略
 
             this.StrategyId = 1;
         }
@@ -234,8 +229,7 @@ namespace SimpleMACross
         /// </summary>
         private void InitializeIndicators()
         {
-            this.indicatorFastMA = Core.Instance.Indicators.BuiltIn.SMA(this.FastMA, PriceType.Close);
-            this.indicatorSlowMA = Core.Instance.Indicators.BuiltIn.SMA(this.SlowMA, PriceType.Close);
+            this.indicatorStrategy.InitializeIndicators(this.CurrentSymbol);
         }
 
         /// <summary>
@@ -244,8 +238,7 @@ namespace SimpleMACross
         private void InitializeHistoryData()
         {
             this.hdm = this.CurrentSymbol.GetHistory(this.Period, this.CurrentSymbol.HistoryType, this.StartPoint);
-            this.hdm.AddIndicator(this.indicatorFastMA);
-            this.hdm.AddIndicator(this.indicatorSlowMA);
+            this.indicatorStrategy.AddIndicatorsToHistory(this.hdm);
         }
 
         /// <summary>
@@ -263,6 +256,7 @@ namespace SimpleMACross
         protected override void OnStop()
         {
             eventManager.UnsubscribeAll();
+            indicatorStrategy.Dispose();  // 新增：釋放指標資源
             base.OnStop();
         }
 
@@ -341,9 +335,7 @@ namespace SimpleMACross
         #region Trading Logic
         /// <summary>
         /// 策略核心邏輯
-        /// 根據MA指標交叉情況進行交易決策
-        /// 1. 當有持倉時，判斷是否需要平倉
-        /// 2. 當無持倉時，判斷是否出現開倉信號
+        /// 根據指標策略進行交易決策
         /// </summary>
         private void OnUpdate()
         {
@@ -354,18 +346,18 @@ namespace SimpleMACross
 
             if (positions.Any())
             {
-                if (TradingSignals.ShouldClosePosition(this.indicatorFastMA, this.indicatorSlowMA))
+                if (indicatorStrategy.ShouldClosePosition())
                 {
                     orderExecutor.ExecuteClose(positions);
                 }
             }
             else
             {
-                if (TradingSignals.IsLongSignal(this.indicatorFastMA, this.indicatorSlowMA))
+                if (indicatorStrategy.IsLongSignal())
                 {
                     orderExecutor.ExecuteOpen(Side.Buy);
                 }
-                else if (TradingSignals.IsShortSignal(this.indicatorFastMA, this.indicatorSlowMA))
+                else if (indicatorStrategy.IsShortSignal())
                 {
                     orderExecutor.ExecuteOpen(Side.Sell);
                 }
@@ -384,39 +376,6 @@ namespace SimpleMACross
         #endregion
 
         #region Helper Classes
-        /// <summary>
-        /// 交易信號處理模塊
-        /// </summary>
-        private static class TradingSignals
-        {
-            /// <summary>
-            /// 檢查是否需要平倉
-            /// </summary>
-            public static bool ShouldClosePosition(Indicator fastMA, Indicator slowMA)
-            {
-                return fastMA.GetValue(1) < slowMA.GetValue(1) || 
-                       fastMA.GetValue(1) > slowMA.GetValue(1);
-            }
-
-            /// <summary>
-            /// 檢查是否出現做多信號
-            /// </summary>
-            public static bool IsLongSignal(Indicator fastMA, Indicator slowMA)
-            {
-                return fastMA.GetValue(2) < slowMA.GetValue(2) && 
-                       fastMA.GetValue(1) > slowMA.GetValue(1);
-            }
-
-            /// <summary>
-            /// 檢查是否出現做空信號
-            /// </summary>
-            public static bool IsShortSignal(Indicator fastMA, Indicator slowMA)
-            {
-                return fastMA.GetValue(2) > slowMA.GetValue(2) && 
-                       fastMA.GetValue(1) < slowMA.GetValue(1);
-            }
-        }
-
         /// <summary>
         /// 倉位管理模塊
         /// </summary>
